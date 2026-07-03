@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Week Blocker (Offline)</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #F7F5F0;
+    color: #1E2421;
+    margin: 0;
+    padding: 16px 12px 40px;
+  }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .subtitle { font-size: 13px; color: #6B6558; margin: 4px 0 0; }
+  button { font-family: inherit; cursor: pointer; }
+
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #fff; border: 1px solid #E8E3D8; border-radius: 12px;
+    padding: 8px 10px; margin: 14px 0;
+  }
+  .nav button.arrow { background: transparent; border: none; padding: 4px 8px; font-size: 18px; }
+  .nav-center { text-align: center; }
+  .nav-range { font-size: 13px; font-weight: 700; }
+  .nav-sub { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 11px; color: #8A8374; margin-top: 2px; }
+  .jump-btn { color: #2D5C56; font-weight: 600; background: none; border: none; padding: 0; font-size: 11px; }
+
+  .tray { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
+  .chip {
+    display: flex; align-items: center; gap: 6px;
+    border-radius: 20px; padding: 7px 12px; font-size: 13px; font-weight: 600;
+    border: 2px solid transparent; box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+  .chip.selected { border: 2px solid #1E2421; box-shadow: 0 0 0 3px rgba(30,36,33,0.12); }
+  .chip .x { opacity: 0.75; margin-left: 2px; font-weight: 900; }
+  .add-btn {
+    display: flex; align-items: center; gap: 4px; background: transparent;
+    border: 2px dashed #B8B0A0; border-radius: 20px; padding: 7px 12px;
+    font-size: 13px; font-weight: 600; color: #6B6558;
+  }
+  .add-form { display: flex; gap: 6px; }
+  .add-form input {
+    border: 1px solid #C8C0B0; border-radius: 8px; padding: 6px 10px; font-size: 13px; width: 140px;
+  }
+  .add-form button {
+    background: #2D5C56; color: #F4F1EA; border: none; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600;
+  }
+  .erase-btn {
+    display: flex; align-items: center; gap: 4px; border: 2px solid #C8C0B0;
+    border-radius: 20px; padding: 7px 12px; font-size: 13px; font-weight: 600;
+    background: transparent; color: #6B6558;
+  }
+  .erase-btn.active { background: #1E2421; color: #F4F1EA; }
+
+  .status-line { font-size: 12px; color: #2D5C56; font-weight: 600; margin-bottom: 10px; }
+
+  .grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; min-width: 460px; width: 100%; }
+  th, td { border: 1px solid #E8E3D8; text-align: center; }
+  th { padding: 4px 0; font-size: 12px; }
+  th .date { font-size: 9px; color: #8A8374; font-weight: 400; display: block; }
+  .hour-label { font-size: 10px; color: #8A8374; text-align: right; padding-right: 6px; border: none; white-space: nowrap; }
+  .cell {
+    height: 30px; width: 52px; cursor: pointer; font-size: 9px; font-weight: 700;
+    padding: 0 2px; user-select: none;
+  }
+  .cell span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell.done { opacity: 0.45; }
+
+  .footer { margin-top: 18px; display: flex; gap: 10px; align-items: center; }
+  .clear-btn {
+    display: flex; align-items: center; gap: 6px; background: transparent;
+    border: 1px solid #C8C0B0; border-radius: 8px; padding: 8px 14px; font-size: 13px;
+    color: #6B6558; font-weight: 600;
+  }
+  .confirm-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .confirm-row .yes { background: #B4592F; color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font-weight: 600; }
+  .confirm-row .no { background: transparent; border: 1px solid #C8C0B0; border-radius: 8px; padding: 6px 12px; font-weight: 600; color: #6B6558; }
+
+  .storage-note { margin-top: 20px; font-size: 11px; color: #A39C8C; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Week Blocker</h1>
+  <p class="subtitle">Tap a task, then tap hours to fill. Tap a filled block to mark it done. Works fully offline.</p>
+</header>
+
+<div class="nav">
+  <button class="arrow" id="prevWeek">‹</button>
+  <div class="nav-center">
+    <div class="nav-range" id="weekRange"></div>
+    <div class="nav-sub">
+      <button class="jump-btn" id="jumpToday" style="display:none;">Jump to this week</button>
+      <span id="doneCount"></span>
+    </div>
+  </div>
+  <button class="arrow" id="nextWeek">›</button>
+</div>
+
+<div class="tray" id="taskTray"></div>
+
+<div class="status-line" id="statusLine" style="display:none;"></div>
+
+<div class="grid-wrap">
+  <table id="grid"></table>
+</div>
+
+<div class="footer" id="footer">
+  <button class="clear-btn" id="clearWeekBtn">↺ Clear this week</button>
+</div>
+
+<p class="storage-note">
+  Data is saved locally in this browser only (not synced across devices). Keep this file and don't clear your browser's site data if you want to keep your weeks.
+</p>
+
+<script>
+(function () {
+  const DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
+  const START_HOUR = 6, END_HOUR = 24;
+  const HOURS = [];
+  for (let h = START_HOUR; h < END_HOUR; h++) HOURS.push(h);
+
+  const PALETTE = [
+    { bg: "#2D5C56", text: "#F4F1EA" },
+    { bg: "#B4592F", text: "#F4F1EA" },
+    { bg: "#5B4B8A", text: "#F4F1EA" },
+    { bg: "#3E6B8A", text: "#F4F1EA" },
+    { bg: "#8A6D2F", text: "#F4F1EA" },
+    { bg: "#6B7A3D", text: "#F4F1EA" },
+    { bg: "#8A3E5C", text: "#F4F1EA" },
+  ];
+
+  const TASKS_KEY = "wb_tasks_v1";
+  const weekStorageKey = wk => "wb_week_" + wk;
+
+  function weekKeyFor(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diffToSat = (day + 1) % 7;
+    d.setDate(d.getDate() - diffToSat);
+    d.setHours(0,0,0,0);
+    return d.toISOString().slice(0,10);
+  }
+  function formatHour(h) {
+    const period = (h < 12 || h === 24) ? "AM" : "PM";
+    let display = h % 12; if (display === 0) display = 12;
+    return display + period;
+  }
+  function dateForColumn(weekKey, colIndex) {
+    const d = new Date(weekKey + "T00:00:00");
+    d.setDate(d.getDate() + colIndex);
+    return d;
+  }
+  function formatShortDate(d) {
+    return (d.getMonth()+1) + "/" + d.getDate();
+  }
+
+  function loadTasks() {
+    try {
+      const raw = localStorage.getItem(TASKS_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return [
+      { id: "t1", name: "Sleep", color: 0 },
+      { id: "t2", name: "Study block", color: 1 },
+      { id: "t3", name: "Anki review", color: 2 },
+      { id: "t4", name: "Meals", color: 4 },
+    ];
+  }
+  function saveTasks(tasks) {
+    localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+  }
+  function loadWeek(wk) {
+    try {
+      const raw = localStorage.getItem(weekStorageKey(wk));
+      if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return {};
+  }
+  function saveWeek(wk, placements) {
+    localStorage.setItem(weekStorageKey(wk), JSON.stringify(placements));
+  }
+
+  let tasks = loadTasks();
+  let weekKey = weekKeyFor(new Date());
+  let placements = loadWeek(weekKey);
+  let selectedTaskId = null;
+  let eraseMode = false;
+  let confirmClear = false;
+
+  const taskTray = document.getElementById("taskTray");
+  const statusLine = document.getElementById("statusLine");
+  const gridEl = document.getElementById("grid");
+  const weekRangeEl = document.getElementById("weekRange");
+  const jumpTodayBtn = document.getElementById("jumpToday");
+  const doneCountEl = document.getElementById("doneCount");
+  const footer = document.getElementById("footer");
+
+  function taskById(id) { return tasks.find(t => t.id === id); }
+
+  function render() {
+    renderNav();
+    renderTray();
+    renderStatus();
+    renderGrid();
+    renderFooter();
+  }
+
+  function renderNav() {
+    const start = new Date(weekKey + "T00:00:00");
+    const end = new Date(start); end.setDate(end.getDate() + 6);
+    weekRangeEl.textContent = formatShortDate(start) + " – " + formatShortDate(end);
+    const isCurrent = weekKey === weekKeyFor(new Date());
+    jumpTodayBtn.style.display = isCurrent ? "none" : "inline";
+    const total = Object.keys(placements).length;
+    const done = Object.values(placements).filter(p => p.done).length;
+    doneCountEl.textContent = total > 0 ? (done + "/" + total + " done") : "";
+  }
+
+  function renderTray() {
+    taskTray.innerHTML = "";
+    tasks.forEach(task => {
+      const c = PALETTE[task.color % PALETTE.length];
+      const chip = document.createElement("button");
+      chip.className = "chip" + (selectedTaskId === task.id ? " selected" : "");
+      chip.style.background = c.bg;
+      chip.style.color = c.text;
+      chip.innerHTML = task.name + ' <span class="x">×</span>';
+      chip.addEventListener("click", (e) => {
+        if (e.target.classList.contains("x")) return;
+        eraseMode = false;
+        selectedTaskId = selectedTaskId === task.id ? null : task.id;
+        render();
+      });
+      chip.querySelector(".x").addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteTask(task.id);
+      });
+      taskTray.appendChild(chip);
+    });
+
+    const addBtn = document.createElement("button");
+    addBtn.className = "add-btn";
+    addBtn.textContent = "+ Add task";
+    addBtn.addEventListener("click", () => {
+      const name = prompt("Task name:");
+      if (name && name.trim()) {
+        const color = tasks.length % PALETTE.length;
+        tasks.push({ id: "t" + Date.now(), name: name.trim(), color });
+        saveTasks(tasks);
+        render();
+      }
+    });
+    taskTray.appendChild(addBtn);
+
+    const eraseBtn = document.createElement("button");
+    eraseBtn.className = "erase-btn" + (eraseMode ? " active" : "");
+    eraseBtn.textContent = "⌫ Erase";
+    eraseBtn.addEventListener("click", () => {
+      selectedTaskId = null;
+      eraseMode = !eraseMode;
+      render();
+    });
+    taskTray.appendChild(eraseBtn);
+  }
+
+  function deleteTask(id) {
+    tasks = tasks.filter(t => t.id !== id);
+    saveTasks(tasks);
+    Object.keys(placements).forEach(k => {
+      if (placements[k] && placements[k].taskId === id) delete placements[k];
+    });
+    saveWeek(weekKey, placements);
+    if (selectedTaskId === id) selectedTaskId = null;
+    render();
+  }
+
+  function renderStatus() {
+    if (selectedTaskId) {
+      statusLine.style.display = "block";
+      statusLine.textContent = 'Placing "' + taskById(selectedTaskId).name + '" — tap slots to fill, tap the chip again to stop.';
+    } else if (eraseMode) {
+      statusLine.style.display = "block";
+      statusLine.textContent = "Erase mode — tap filled slots to clear them.";
+    } else {
+      statusLine.style.display = "none";
+    }
+  }
+
+  function renderGrid() {
+    gridEl.innerHTML = "";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headRow.appendChild(document.createElement("th"));
+    DAY_LABELS.forEach((d, i) => {
+      const th = document.createElement("th");
+      const colDate = dateForColumn(weekKey, i);
+      th.innerHTML = d + '<span class="date">' + formatShortDate(colDate) + "</span>";
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    gridEl.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    HOURS.forEach(h => {
+      const row = document.createElement("tr");
+      const hourTd = document.createElement("td");
+      hourTd.className = "hour-label";
+      hourTd.textContent = formatHour(h);
+      row.appendChild(hourTd);
+
+      DAY_LABELS.forEach(d => {
+        const cellKey = d + "-" + h;
+        const entry = placements[cellKey];
+        const placedTask = entry ? taskById(entry.taskId) : null;
+        const td = document.createElement("td");
+        td.className = "cell" + (entry && entry.done ? " done" : "");
+        if (placedTask) {
+          const c = PALETTE[placedTask.color % PALETTE.length];
+          td.style.background = c.bg;
+          if (!entry.done) {
+            td.innerHTML = '<span style="color:' + c.text + '">' + placedTask.name + "</span>";
+          } else {
+            td.innerHTML = '<span style="color:' + c.text + '">✓</span>';
+          }
+        } else {
+          td.style.background = "#FFFFFF";
+        }
+        td.addEventListener("click", () => handleCellTap(cellKey));
+        row.appendChild(td);
+      });
+      tbody.appendChild(row);
+    });
+    gridEl.appendChild(tbody);
+  }
+
+  function handleCellTap(cellKey) {
+    const existing = placements[cellKey];
+    if (selectedTaskId) {
+      if (existing && existing.taskId === selectedTaskId) {
+        delete placements[cellKey];
+      } else {
+        placements[cellKey] = { taskId: selectedTaskId, done: false };
+      }
+    } else if (eraseMode) {
+      if (existing) delete placements[cellKey];
+    } else if (existing) {
+      existing.done = !existing.done;
+    }
+    saveWeek(weekKey, placements);
+    render();
+  }
+
+  function renderFooter() {
+    footer.innerHTML = "";
+    if (!confirmClear) {
+      const btn = document.createElement("button");
+      btn.className = "clear-btn";
+      btn.textContent = "↺ Clear this week";
+      btn.addEventListener("click", () => { confirmClear = true; render(); });
+      footer.appendChild(btn);
+    } else {
+      const row = document.createElement("div");
+      row.className = "confirm-row";
+      row.innerHTML = '<span style="color:#6B6558;">Clear this week\'s placements?</span>';
+      const yes = document.createElement("button");
+      yes.className = "yes";
+      yes.textContent = "Yes, clear";
+      yes.addEventListener("click", () => {
+        placements = {};
+        saveWeek(weekKey, placements);
+        confirmClear = false;
+        render();
+      });
+      const no = document.createElement("button");
+      no.className = "no";
+      no.textContent = "Cancel";
+      no.addEventListener("click", () => { confirmClear = false; render(); });
+      row.appendChild(yes);
+      row.appendChild(no);
+      footer.appendChild(row);
+    }
+  }
+
+  document.getElementById("prevWeek").addEventListener("click", () => {
+    const d = new Date(weekKey + "T00:00:00");
+    d.setDate(d.getDate() - 7);
+    weekKey = weekKeyFor(d);
+    placements = loadWeek(weekKey);
+    confirmClear = false;
+    render();
+  });
+  document.getElementById("nextWeek").addEventListener("click", () => {
+    const d = new Date(weekKey + "T00:00:00");
+    d.setDate(d.getDate() + 7);
+    weekKey = weekKeyFor(d);
+    placements = loadWeek(weekKey);
+    confirmClear = false;
+    render();
+  });
+  jumpTodayBtn.addEventListener("click", () => {
+    weekKey = weekKeyFor(new Date());
+    placements = loadWeek(weekKey);
+    confirmClear = false;
+    render();
+  });
+  document.getElementById("clearWeekBtn") && document.getElementById("clearWeekBtn").addEventListener("click", () => {});
+
+  render();
+})();
+</script>
+
+</body>
+</html>
